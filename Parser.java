@@ -4,7 +4,26 @@ import java.util.Scanner;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+class CostUnitData {
+    private int ik;
+    String name;
+    String addressStreet;
+    String addressPostalCode;
+    String addressCity;
+    int idRegion;
+    int idState;
+    int parentIk;
+    int dataCollectionIk;
+    
+    // constructor
+    public CostUnitData(int ikNr) {
+        this.ik = ikNr;
+    }
 
+    // getter
+    public int getIk(){
+        return ik;
+    }
 }
   
 public class Parser {
