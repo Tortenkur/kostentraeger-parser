@@ -3,65 +3,153 @@ import java.io.FileNotFoundException;
 import java.util.Scanner;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.Stack;
+import java.util.Arrays;
+import java.util.HashMap;
 
 class CostUnitData {
-    private int ik;
+    private String ik;
     String name;
     String addressStreet;
     String addressPostalCode;
     String addressCity;
-    int idRegion;
-    int idState;
-    int parentIk;
-    int dataCollectionIk;
+    String idRegion;
+    String idState;
+    String email;
+    String parentIk;
+    String dataCollectionIk;
     
     // constructor
-    public CostUnitData(int ikNr) {
+    public CostUnitData(String ikNr) {
         this.ik = ikNr;
     }
 
     // getter
-    public int getIk(){
+    public String getIk(){
         return ik;
     }
 }
   
 public class Parser {
+    static String checkSegment(String segment, String segmentTerminator) {
+            // check segment and remove segment terminator
+            Pattern checkSegmentPattern = Pattern.compile(segmentTerminator + "$");
+            Matcher checkSegmentMatcher = checkSegmentPattern.matcher(segment);
+            if (!checkSegmentMatcher.find()) {
+                System.out.println("Segment failure in segment" + segment);
+            } else {
+                segment = segment.substring(0, segment.length()-1);
+            }
+            return segment;
+    }
+
+    
     public static void main(String[] args) {
 
         // variables
         String seperator = "";
+        Stack <String> connectionSegmentsVkgStack = new Stack <String>();
+        HashMap <String, CostUnitData> messagesHashMap = new HashMap <String, CostUnitData>(); 
 
         // read file
         try {
             
             int msgCount = 0;
             int numMessages = 0;
+            String segmentTerminator = "";
             File costUnit = new File("AO05Q323.ke0");
             Scanner costUnitReader = new Scanner(costUnit, "ISO-8859-1");
             while (costUnitReader.hasNextLine()) {
-
-                // extract messages
                 String data = costUnitReader.nextLine();
                 Pattern fileHeadPattern = Pattern.compile("^UNA");
-                Matcher fileHeadMatcher = fileHeadPattern.matcher(data);
                 Pattern fileEndPattern = Pattern.compile("^UNZ");
-                Matcher fileEndMatcher = fileEndPattern.matcher(data);
                 Pattern messageHeadPattern = Pattern.compile("^UNH");
-                Matcher messageHeadMatcher = messageHeadPattern.matcher(data);
                 Pattern messageEndPattern = Pattern.compile("^UNT");
-                Matcher messageEndMatcher = messageEndPattern.matcher(data);
+                Matcher messageEndMatcher;
 
+                Matcher fileHeadMatcher = fileHeadPattern.matcher(data);
                 if (fileHeadMatcher.find()) {
                     String[] dataArr = data.split("", 0);
                     seperator = "\\" + dataArr[4];
+                    segmentTerminator =  "\\" + dataArr[8];
                     continue;
                 }
+                
+                data = checkSegment(data, segmentTerminator);
 
+                // extract message
+                Matcher messageHeadMatcher = messageHeadPattern.matcher(data);
                 if (messageHeadMatcher.find()) {
                     msgCount ++;
+                    int numSegments = 1;
+                    String[] dataArr = data.split(seperator, 0);
+                    String messageReference = dataArr[1];
+
+                    // Message variables
+                    String ik = "";
+                    String name = "";
+                    String addressStreet = "";
+                    String addressPostalCode = "";
+                    String addressCity = "";
+                    String email = "";
+                                    
+                    do {
+                        data = costUnitReader.nextLine();
+                        numSegments ++;
+                        data = checkSegment(data, segmentTerminator);
+                        dataArr = data.split(seperator, 0);
+
+                        switch(dataArr[0]) {
+                            case "IDK":
+                                dataArr = data.split(seperator, 0);
+                                ik = dataArr[1];
+                                break;
+                            case "VKG":
+                                String connectionSegmentToAdd = data + seperator + ik;
+                                connectionSegmentsVkgStack.add(connectionSegmentToAdd);
+                                break;
+                            case "NAM":
+                                String[] nameToAddArray = Arrays.copyOfRange(dataArr, 2, dataArr.length);
+                                name = String.join(" ", nameToAddArray);
+                                break;
+                            case "ANS":
+                                if (dataArr[1].equals("1")) {
+                                    addressPostalCode = dataArr[2];
+                                    if (dataArr.length > 3) {
+                                        addressCity = dataArr[3];
+                                    }
+                                    if (dataArr.length > 4) {
+                                        addressStreet = dataArr[4];
+                                    }
+                                }
+                                break;
+                            case "DFU":
+                                if (dataArr[2].equals("070")) {
+                                    email = dataArr[7];
+                                }
+                                break;
+                        }
+
+                    }
+                    while (!dataArr[0].equals("UNT"));
+
+                    // check message integrity
+                    dataArr = data.split(seperator, 0);
+                    if (!(numSegments == Integer.parseInt(dataArr[1]) && messageReference.equals(dataArr[2]))) {
+                        System.out.println("integrity error with message " + messageReference); 
+                    }
+
+                    // save message as object in HashMap
+                    CostUnitData messageData = new CostUnitData(ik);
+                    messageData.name = name;
+                    messageData.addressStreet = addressStreet;
+                    messageData.addressPostalCode = addressPostalCode;
+                    messageData.addressCity = addressCity;
+                    messageData.email = email;
+                    messagesHashMap.put(ik, messageData);
                 }
 
+                Matcher fileEndMatcher = fileEndPattern.matcher(data);
                 if (fileEndMatcher.find()) {
                     String[] dataArr = data.split(seperator, 0);
                     numMessages = Integer.parseInt(dataArr[1]);
@@ -70,11 +158,14 @@ public class Parser {
             costUnitReader.close();
 
             // check if all messages have been read
-            System.out.println(msgCount == numMessages);
+            if (numMessages != messagesHashMap.size()) {
+                System.out.println("Messages have not been properly read.");
+            }
         } catch (FileNotFoundException e) {
             System.out.println("File to parse not found.");
             e.printStackTrace();
         }
+        
     }
 }
 
