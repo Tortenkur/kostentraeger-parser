@@ -1,5 +1,6 @@
 import java.io.File;
 import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.util.Scanner;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -28,6 +29,18 @@ class CostUnitData {
     public String getIk(){
         return ik;
     }
+
+    // setter
+    public void setIdRegion(String id) {
+        if (id != "") {
+            this.idRegion = id;
+        }
+    }
+    public void setIdState(String id) {
+        if (id != "") {
+            this.idState = id;
+        }
+    }
 }
   
 public class Parser {
@@ -49,9 +62,9 @@ public class Parser {
         // variables
         String seperator = "";
         Stack <String> connectionSegmentsVkgStack = new Stack <String>();
-        HashMap <String, CostUnitData> messagesHashMap = new HashMap <String, CostUnitData>(); 
+        HashMap <String, CostUnitData> costUnitHashMap = new HashMap <String, CostUnitData>(); 
 
-        // read file
+        // read and parse file
         try {
             
             int msgCount = 0;
@@ -106,7 +119,7 @@ public class Parser {
                                 break;
                             case "VKG":
                                 String connectionSegmentToAdd = data + seperator + ik;
-                                connectionSegmentsVkgStack.add(connectionSegmentToAdd);
+                                connectionSegmentsVkgStack.push(connectionSegmentToAdd);
                                 break;
                             case "NAM":
                                 String[] nameToAddArray = Arrays.copyOfRange(dataArr, 2, dataArr.length);
@@ -146,7 +159,7 @@ public class Parser {
                     messageData.addressPostalCode = addressPostalCode;
                     messageData.addressCity = addressCity;
                     messageData.email = email;
-                    messagesHashMap.put(ik, messageData);
+                    costUnitHashMap.put(ik, messageData);
                 }
 
                 Matcher fileEndMatcher = fileEndPattern.matcher(data);
@@ -158,14 +171,36 @@ public class Parser {
             costUnitReader.close();
 
             // check if all messages have been read
-            if (numMessages != messagesHashMap.size()) {
+            if (numMessages != costUnitHashMap.size()) {
                 System.out.println("Messages have not been properly read.");
             }
         } catch (FileNotFoundException e) {
             System.out.println("File to parse not found.");
             e.printStackTrace();
         }
+    // Handle connection segments
+    while (!connectionSegmentsVkgStack.empty()) {
+        String data = connectionSegmentsVkgStack.pop();
+        String[] dataArr = data.split(seperator, 0);
+        if (dataArr.length < 11) { // illegal VGK?
+            continue;
+        }
+        String ik = dataArr[2];
+        switch (dataArr[1]) { //connection type
+            case "01":
+                costUnitHashMap.get(ik).parentIk = dataArr[10];
+                break;
+            case "02":
+            case "03":
+            case "09":
+                costUnitHashMap.get(ik).dataCollectionIk = dataArr[10];
+        }
+        costUnitHashMap.get(ik).setIdRegion(dataArr[8]);
+        costUnitHashMap.get(ik).setIdState(dataArr[7]);
+    }
         
+    // Build csv file
+
     }
 }
 
