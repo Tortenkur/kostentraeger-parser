@@ -1,4 +1,5 @@
 import java.io.File;
+import java.io.FileWriter;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.Scanner;
@@ -200,6 +201,38 @@ public class Parser {
     }
         
     // Build csv file
+    File outputFile = new File("output.csv");
+    if (!outputFile.exists()) {
+        try {
+            outputFile.createNewFile();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+    
+    try {
+        FileWriter outputWriter = new FileWriter("output.csv");
+        for (String i : costUnitHashMap.keySet()) {
+            CostUnitData outputObj = new CostUnitData(i);
+            outputObj = costUnitHashMap.get(i);
+            String[] outputArr = {outputObj.getIk(),
+                                outputObj.name,
+                                outputObj.addressStreet,
+                                outputObj.addressPostalCode,
+                                outputObj.addressCity,
+                                outputObj.idRegion,
+                                outputObj.idState,
+                                outputObj.parentIk,
+                                outputObj.dataCollectionIk
+                                };
+            String output = String.join(";", outputArr).concat("\n");
+            outputWriter.write(output);
+        }
+        outputWriter.close();
+    } catch (IOException e) {
+        e.printStackTrace();
+    }
+    
 
     }
 }
