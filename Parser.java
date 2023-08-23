@@ -8,6 +8,7 @@ import java.util.regex.Pattern;
 import java.util.Stack;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.ArrayList;
 
 class CostUnitData {
     private String ik;
@@ -15,11 +16,9 @@ class CostUnitData {
     String addressStreet;
     String addressPostalCode;
     String addressCity;
-    String idRegion;
-    String idState;
     String email;
     String parentIk;
-    String dataCollectionIk;
+    private ArrayList<String[]> dataCollectionVkgs = new ArrayList<String[]>();
     
     // constructor
     public CostUnitData(String ikNr) {
@@ -27,20 +26,17 @@ class CostUnitData {
     }
 
     // getter
-    public String getIk(){
+    public String getIk() {
         return ik;
+    }
+    public ArrayList<String[]> getDataCollectionVkgs() {
+        return dataCollectionVkgs;
     }
 
     // setter
-    public void setIdRegion(String id) {
-        if (id != "") {
-            this.idRegion = id;
-        }
-    }
-    public void setIdState(String id) {
-        if (id != "") {
-            this.idState = id;
-        }
+    public void addDataCollectionVkg(String idState, String idRegion, String dataCollectionIk) {
+        String[] arrayToAdd = {idState, idRegion, dataCollectionIk};
+        dataCollectionVkgs.add(arrayToAdd);
     }
 }
   
@@ -62,7 +58,6 @@ public class Parser {
 
         // variables
         String seperator = "";
-        Stack <String> connectionSegmentsVkgStack = new Stack <String>();
         HashMap <String, CostUnitData> costUnitHashMap = new HashMap <String, CostUnitData>(); 
 
         // read and parse file
@@ -106,27 +101,46 @@ public class Parser {
                     String addressPostalCode = "";
                     String addressCity = "";
                     String email = "";
+                    String parentIk = "";
+                    Stack<String[]> dataCollectionVkgStack = new Stack<String[]>();
                                     
+                    // Read message segments
                     do {
                         data = costUnitReader.nextLine();
                         numSegments ++;
                         data = checkSegment(data, segmentTerminator);
                         dataArr = data.split(seperator, 0);
-
+                        
+                        // Unterscheidung Segment-Kennung
                         switch(dataArr[0]) {
                             case "IDK":
-                                dataArr = data.split(seperator, 0);
                                 ik = dataArr[1];
                                 break;
                             case "VKG":
-                                String connectionSegmentToAdd = data + seperator + ik;
-                                connectionSegmentsVkgStack.push(connectionSegmentToAdd);
+                                // Unterscheidung Art der Verknuepfung
+                                switch(dataArr[1]) {
+                                    case "01":
+                                        parentIk = dataArr[2];
+                                        break;
+                                    case "02":
+                                    case "03":
+                                        if (dataArr[5].equals("07")) {
+                                            dataCollectionVkgStack.push(dataArr);
+                                        } else {
+                                            System.out.println("Ungueltige Verknuepfung: " + data);
+                                        }
+                                        break;
+                                    case "09":
+                                        dataCollectionVkgStack.push(dataArr);
+                                        break;
+                                }
                                 break;
                             case "NAM":
-                                String[] nameToAddArray = Arrays.copyOfRange(dataArr, 2, dataArr.length);
-                                name = String.join(" ", nameToAddArray);
+                                String[] arrayNameToAdd = Arrays.copyOfRange(dataArr, 2, dataArr.length);
+                                name = String.join(" ", arrayNameToAdd);
                                 break;
                             case "ANS":
+                                // Nur Beruecksichtigung von Hausanschrift
                                 if (dataArr[1].equals("1")) {
                                     addressPostalCode = dataArr[2];
                                     if (dataArr.length > 3) {
@@ -160,6 +174,11 @@ public class Parser {
                     messageData.addressPostalCode = addressPostalCode;
                     messageData.addressCity = addressCity;
                     messageData.email = email;
+                    messageData.parentIk = parentIk;
+                    while (!dataCollectionVkgStack.empty()) {
+                        String[] vkgSegment = dataCollectionVkgStack.pop();
+                        messageData.addDataCollectionVkg(vkgSegment[7], vkgSegment[8], vkgSegment[2]);
+                    }
                     costUnitHashMap.put(ik, messageData);
                 }
 
@@ -179,26 +198,6 @@ public class Parser {
             System.out.println("File to parse not found.");
             e.printStackTrace();
         }
-    // Handle connection segments
-    while (!connectionSegmentsVkgStack.empty()) {
-        String data = connectionSegmentsVkgStack.pop();
-        String[] dataArr = data.split(seperator, 0);
-        if (dataArr.length < 11) { // illegal VGK?
-            continue;
-        }
-        String ik = dataArr[2];
-        switch (dataArr[1]) { //connection type
-            case "01":
-                costUnitHashMap.get(ik).parentIk = dataArr[10];
-                break;
-            case "02":
-            case "03":
-            case "09":
-                costUnitHashMap.get(ik).dataCollectionIk = dataArr[10];
-        }
-        costUnitHashMap.get(ik).setIdRegion(dataArr[8]);
-        costUnitHashMap.get(ik).setIdState(dataArr[7]);
-    }
         
     // Build csv file
     File outputFile = new File("output.csv");
@@ -215,25 +214,27 @@ public class Parser {
         for (String i : costUnitHashMap.keySet()) {
             CostUnitData outputObj = new CostUnitData(i);
             outputObj = costUnitHashMap.get(i);
-            String[] outputArr = {outputObj.getIk(),
-                                outputObj.name,
-                                outputObj.addressStreet,
-                                outputObj.addressPostalCode,
-                                outputObj.addressCity,
-                                outputObj.idRegion,
-                                outputObj.idState,
-                                outputObj.parentIk,
-                                outputObj.dataCollectionIk
-                                };
-            String output = String.join(";", outputArr).concat("\n");
-            outputWriter.write(output);
+            ArrayList<String[]> outputVkgs = outputObj.getDataCollectionVkgs();
+            for (String[] vkg : outputVkgs) {
+                String[] outputArr = {outputObj.getIk(),
+                                    outputObj.name,
+                                    outputObj.addressStreet,
+                                    outputObj.addressPostalCode,
+                                    outputObj.addressCity,
+                                    vkg[1],
+                                    vkg[0],
+                                    outputObj.email,
+                                    outputObj.parentIk,
+                                    vkg[2]
+                                    };
+                String output = String.join(";", outputArr).concat("\n");
+                outputWriter.write(output);
+            }
         }
         outputWriter.close();
     } catch (IOException e) {
         e.printStackTrace();
     }
-    
-
     }
 }
 
